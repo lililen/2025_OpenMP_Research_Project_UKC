@@ -1,0 +1,78 @@
+(OpenMP-Parallelized Image Augmentation)
+
+Baseline:
+
+Trial 1:
+
+Dataset size: 50000 samples
+workers=0, Epoch=1, Time=9.53s
+workers=0, Epoch=2, Time=8.66s
+workers=0, Epoch=3, Time=9.08s
+workers=0, Total Time=27.27s (Avg 9.09s/epoch)
+
+workers=2, Epoch=1, Time=5.97s
+workers=2, Epoch=2, Time=5.46s
+workers=2, Epoch=3, Time=4.70s
+workers=2, Total Time=16.13s (Avg 5.38s/epoch)
+
+workers=4, Epoch=1, Time=2.99s
+workers=4, Epoch=2, Time=2.79s
+workers=4, Epoch=3, Time=2.86s
+workers=4, Total Time=8.63s (Avg 2.88s/epoch)
+
+workers=8, Epoch=1, Time=2.01s
+workers=8, Epoch=2, Time=1.93s
+workers=8, Epoch=3, Time=1.88s
+workers=8, Total Time=5.83s (Avg 1.94s/epoch)
+
+------------------------------------------------
+
+Trial 2:
+
+Dataset size: 50000 samples
+workers=0, Epoch=1, Time=8.18s
+workers=0, Epoch=2, Time=7.82s
+workers=0, Epoch=3, Time=7.76s
+workers=0, Total Time=23.76s (Avg 7.92s/epoch)
+
+workers=2, Epoch=1, Time=4.87s
+workers=2, Epoch=2, Time=4.94s
+workers=2, Epoch=3, Time=4.76s
+workers=2, Total Time=14.56s (Avg 4.85s/epoch)
+
+workers=4, Epoch=1, Time=3.08s
+workers=4, Epoch=2, Time=3.04s
+workers=4, Epoch=3, Time=2.62s
+workers=4, Total Time=8.74s (Avg 2.91s/epoch)
+
+workers=8, Epoch=1, Time=2.02s
+workers=8, Epoch=2, Time=1.89s
+workers=8, Epoch=3, Time=1.88s
+workers=8, Total Time=5.79s (Avg 1.93s/epoch)
+-----------------------------------------------------
+
+Trial 3:
+
+Dataset size: 50000 samples
+workers=0, Epoch=1, Time=8.87s
+workers=0, Epoch=2, Time=8.44s
+workers=0, Epoch=3, Time=8.34s
+workers=0, Total Time=25.65s (Avg 8.55s/epoch)
+
+workers=2, Epoch=1, Time=4.87s
+workers=2, Epoch=2, Time=7.56s
+workers=2, Epoch=3, Time=6.15s
+workers=2, Total Time=18.58s (Avg 6.19s/epoch)
+
+workers=4, Epoch=1, Time=3.26s
+workers=4, Epoch=2, Time=2.91s
+workers=4, Epoch=3, Time=3.08s
+workers=4, Total Time=9.25s (Avg 3.08s/epoch)
+
+workers=8, Epoch=1, Time=2.10s
+workers=8, Epoch=2, Time=1.86s
+workers=8, Epoch=3, Time=1.84s
+workers=8, Total Time=5.80s (Avg 1.93s/epoch)
+
+
+=======================================================================================
