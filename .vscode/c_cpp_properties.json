@@ -3,7 +3,13 @@
     {
       "name": "windows-gcc-x86",
       "includePath": [
-        "${workspaceFolder}/**"
+        "${workspaceFolder}/**",
+        "C:/Users/lenmo/ana3/anac3/envs/research1.0/Include",
+        "C:/Users/lenmo/ana3/anac3/envs/research1.0/lib/site-packages/pybind11/include",
+        "/usr/local/include/pybind11",  
+        "C:/PythonXX/include/pybind11", 
+        "C:/path/to/your/pybind11/include"
+    ]
       ],
       "compilerPath": "C:/MinGW/bin/gcc.exe",
       "cStandard": "${default}",
