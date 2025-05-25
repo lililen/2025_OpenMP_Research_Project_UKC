@@ -1,14 +1,15 @@
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
+import sys
 import pybind11
 
 ext_modules = [
     Extension(
-        "rotate",  # name of the .pyd module
+        "rotate",
         ["rotate.cpp"],
         include_dirs=[pybind11.get_include()],
         language="c++",
-        extra_compile_args=["/O2", "/std:c++14", "/openmp:experimental"],
+        extra_compile_args=["/std:c++17", "/O2", "/openmp:experimental"],
     ),
 ]
 
