@@ -3,9 +3,8 @@
 //#define use_bilinear 1, for accidenal macros issues
 constexpr bool use_bilinear = true;
 
-
 #include <vector>
-#include<cmath>
+#include <cmath>
 #include <math.h>
 #include <mutex>
 #include <limits>
@@ -15,83 +14,104 @@ constexpr bool use_bilinear = true;
 #include <pybind11/numpy.h>
 #include <omp.h>
 
-namespace py =pybind11;
+namespace py = pybind11;
 
+// helper function for reflection boundary conditions
+inline int reflect_index(int idx, int size) {
+    if (idx < 0) {
+        return -idx - 1;
+    } else if (idx >= size) {
+        return 2 * size - idx - 1;
+    }
+    return idx;
+}
 
-void rotate_omp(py::array_t<float> image, float deg){
+// pixel access with reflection boundary conditions
+inline float get_pixel_reflect(const float* ptr, int x, int y, int c, int w, int h, int channels) {
+    int rx = reflect_index(x, w);
+    int ry = reflect_index(y, h);
+    return ptr[(ry * w + rx) * channels + c];
+}
+
+void rotate_omp(py::array_t<float> image, float deg) {
     auto buf = image.request();
-    float*ptr = static_cast<float*>(buf.ptr);
-    py::ssize_t h_raw = buf.shape[0];
-    if (h_raw > std::numeric_limits<int>::max()) throw std::overflow_error("Image height too large");
-    const int h = static_cast<int>(h_raw);
+    float* ptr = static_cast<float*>(buf.ptr);
 
-    py::ssize_t w_raw = buf.shape[1];
-    if (w_raw > std::numeric_limits<int>::max()) throw std::overflow_error("Image width too large");
-    const int w = static_cast<int>(w_raw);
-    
-    const int channels = buf.ndim == 3 ? buf.shape[2]: 1;
+    const int h = static_cast<int>(buf.shape[0]);
+    const int w = static_cast<int>(buf.shape[1]);
+    const int channels = buf.ndim == 3 ? buf.shape[2] : 1;
 
-    std::vector<float>output(w*h*channels, 0.0f);
-    float angle = deg * static_cast<float>(M_PI / 180.0);     float sin_v = sin(angle);
-    float cos_v = cos(angle);
-    float center_x = w/2.0f;
-    float center_y = h/2.0f;
-//remove collapse(2) bc MSVC doesn't fully support it unless im using OpenMP 5+ with /openmp:11vm or /openmp:experimental
-    #pragma omp parallel for schedule(static) 
-    for (int y=0; y<h; y++){
-        for(int x=0; x<w; x++){
-            float dx = x-center_x;
-            float dy = y-center_y;
-            float src_x = cos_v * dx + sin_v * dy + center_x;
-            float src_y = -sin_v * dx + cos_v * dy + center_y;
+    std::vector<float> output(w * h * channels, 0.0f);
 
-            
-           //if (src_x >= 0 && src_x < w && src_y >= 0 && src_y < h) {
-            if (use_bilinear && src_x >= 1 && src_x < w-2 && src_y >= 1 && src_y < h-2) {                // Manual unrolling for RGB channels
-                //output[(y * w + x) * 3 + 0] = ptr[(src_y * w + src_x) * 3 + 0];
-                //output[(y * w + x) * 3 + 1] = ptr[(src_y * w + src_x) * 3 + 1];
-                //output[(y * w + x) * 3 + 2] = ptr[(src_y * w + src_x) * 3 + 2];
+    // float-> double for precision in angle calculations to match SciPy 
+    double angle_rad = static_cast<double>(deg) * M_PI / 180.0;
+    double sin_v = std::sin(angle_rad);
+    double cos_v = std::cos(angle_rad);
+
+    // SciPy uses (shape-1)/2.0 as center for proper pixel alignment
+    double center_x = (w - 1) / 2.0;
+    double center_y = (h - 1) / 2.0;
+
+    //remove collapse(2) bc MSVC doesn't fully support it unless im using OpenMP 5+ with /openmp:11vm or /openmp:experimental
+    #pragma omp parallel for schedule(static)
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            // Use double precision for coordinate transformations
+            double dx = static_cast<double>(x) - center_x;
+            double dy = static_cast<double>(y) - center_y;
+            double src_x = cos_v * dx - sin_v * dy + center_x;
+            double src_y = sin_v * dx + cos_v * dy + center_y;
+
+            if (use_bilinear) {
                 //bilinear interpolation
-                const float fx = src_x - floor(src_x);
-                const float fy = src_y - floor(src_y);
-                const int x0 = static_cast<int>(src_x);
-                const int y0 = static_cast<int>(src_y);
-                const int x1 = std::min(x0 + 1, w - 1);
-                const int y1 = std::min(y0 + 1, h - 1);
-             
-                //RGB has 3 channels
-                for (int c = 0; c < 3; c++) {  // Fixed from c=3 to c<3
-                        float v00 = ptr[(y0 * w + x0) * 3 + c];
-                        float v01 = ptr[(y0 * w + x1) * 3 + c];
-                        float v10 = ptr[(y1 * w + x0) * 3 + c];
-                        float v11 = ptr[(y1 * w + x1) * 3 + c];
-                    
-                    output[(y * w + x) * 3 + c] = 
-                        v00 * (1-fx)*(1-fy) + 
-                        v01 * fx*(1-fy) + 
-                        v10 * (1-fx)*fy + 
-                        v11 * fx*fy;
-            }
-        }
-        //edge case
-     else if (src_x >= 0 && src_x < w && src_y >= 0 && src_y < h) {
-                int nx = std::clamp(static_cast<int>(round(src_x)), 0, w - 1);
-                int ny = std::clamp(static_cast<int>(round(src_y)), 0, h - 1);
+                // Ensure we stay within bounds for bilinear sampling
+                // Get integer coordinates
+                int x0 = static_cast<int>(std::floor(src_x));
+                int y0 = static_cast<int>(std::floor(src_y));
+                int x1 = x0 + 1;
+                int y1 = y0 + 1;
 
-                for (int c = 0; c < 3; ++c) {
-                    output[(y * w + x) * 3 + c] = ptr[(ny * w + nx) * 3 + c];
+                // fractional parts
+                double fx = src_x - x0;
+                double fy = src_y - y0;
+
+                // Bilinear interpolation with reflection boundary conditions
+                //RGB has 3 channels-> change it to be arbitary number for channels
+                for (int c = 0; c < channels; c++) {  // Fixed from c=3 to c<3
+                    // pixel values as double for better precision calculation
+                    //get_pixel_reflect matching with scipybenchmark
+                    double v00 = static_cast<double>(get_pixel_reflect(ptr, x0, y0, c, w, h, channels));
+                    double v01 = static_cast<double>(get_pixel_reflect(ptr, x1, y0, c, w, h, channels));
+                    double v10 = static_cast<double>(get_pixel_reflect(ptr, x0, y1, c, w, h, channels));
+                    double v11 = static_cast<double>(get_pixel_reflect(ptr, x1, y1, c, w, h, channels));
+
+                    // higher precision bilinear interpolation calculation
+                    double result = v00 * (1.0 - fx) * (1.0 - fy) +
+                                   v01 * fx * (1.0 - fy) +
+                                   v10 * (1.0 - fx) * fy +
+                                   v11 * fx * fy;
+
+                    output[(y * w + x) * channels + c] = static_cast<float>(result);
+                }
+            } else {
+                // use nearest neighbor for edge cases to match SciPy boundary handling
+                // nearest neighbor with reflection boundary conditions
+                int nx = static_cast<int>(std::round(src_x));
+                int ny = static_cast<int>(std::round(src_y));
+
+                for (int c = 0; c < channels; c++) {
+                    output[(y * w + x) * channels + c] = get_pixel_reflect(ptr, nx, ny, c, w, h, channels);
                 }
             }
         }
     }
-        //memcpy(ptr, output.data(), sizeof(float) * w * h * 3);
 
-        memcpy(ptr, &output[0], sizeof(float) * w * h * 3);
-
+    //memcpy(ptr, output.data(), sizeof(float) * w * h * 3);
+    memcpy(ptr, output.data(), sizeof(float) * w * h * channels);
 }
 
 PYBIND11_MODULE(rotate, m) {
-    m.doc()="image rotation";
+    m.doc() = "image rotation with reflection boundary conditions";
     m.def("rotate", &rotate_omp,
-    py::arg("img"), py::arg("degree"), "rotate img in parallel vis OpenMP");
+        py::arg("img"), py::arg("degree"), "rotate img in parallel via OpenMP with bilinear interpolation and reflection boundaries");
 }
