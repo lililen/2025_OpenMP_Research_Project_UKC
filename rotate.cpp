@@ -6,13 +6,11 @@ constexpr bool use_bilinear = true;
 #include <vector>
 #include <cmath>
 #include <math.h>
-#include <mutex>
-#include <limits>
 #include <algorithm>
-#include <cstring>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <omp.h>
+#include <immintrin.h>
 
 namespace py = pybind11;
 
@@ -32,6 +30,24 @@ inline float get_pixel_reflect(const float* ptr, int x, int y, int c, int w, int
     int ry = reflect_index(y, h);
     return ptr[(ry * w + rx) * channels + c];
 }
+
+#if defined(__AVX2__)
+inline __m256 bilinear_interp_avx2(
+    __m256 v00, __m256 v01, __m256 v10, __m256 v11,
+    __m256 fx, __m256 fy) {
+    
+    __m256 omfx = _mm256_sub_ps(_mm256_set1_ps(1.0f), fx);
+    __m256 omfy = _mm256_sub_ps(_mm256_set1_ps(1.0f), fy);
+    
+    __m256 term1 = _mm256_mul_ps(_mm256_mul_ps(v00, omfx), omfy);
+    __m256 term2 = _mm256_mul_ps(_mm256_mul_ps(v01, fx), omfy);
+    __m256 term3 = _mm256_mul_ps(_mm256_mul_ps(v10, omfx), fy);
+    __m256 term4 = _mm256_mul_ps(_mm256_mul_ps(v11, fx), fy);
+    
+    return _mm256_add_ps(_mm256_add_ps(term1, term2), 
+                         _mm256_add_ps(term3, term4));
+}
+#endif
 
 void rotate_omp(py::array_t<float> image, float deg) {
     auto buf = image.request();
@@ -55,25 +71,98 @@ void rotate_omp(py::array_t<float> image, float deg) {
     //remove collapse(2) bc MSVC doesn't fully support it unless im using OpenMP 5+ with /openmp:11vm or /openmp:experimental
     #pragma omp parallel for schedule(static)
     for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++) {
+        //change to x+=8 for procrossing 8 pixels at the same time
+        for (int x = 0; x < w; x++) {  // Process pixel by pixel for now to ensure correctness
+            #if defined(__AVX2__)
+            // disable AVX2 path for now to focus on correctness
+            // will re-enable once we get SSIM=1.0 with scalar code
+            if if (channels == 1 && x + 8 <= w) {
+                // create vector of x coordinates [x, x+1, ..., x+7]
+                __m256 x_vec = _mm256_add_ps(
+                    _mm256_set1_ps(static_cast<float>(x)),
+                    _mm256_setr_ps(0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f)
+                );
+                
+                // convert to displacement from center
+                __m256 dx_vec = _mm256_sub_ps(x_vec, _mm256_set1_ps(static_cast<float>(center_x)));
+                __m256 dy_vec = _mm256_set1_ps(static_cast<float>(y - center_y));
+                
+                // rotation transformation
+                __m256 src_x = _mm256_add_ps(
+                    _mm256_add_ps(
+                        _mm256_mul_ps(_mm256_set1_ps(static_cast<float>(cos_v)), dx_vec),
+                        _mm256_mul_ps(_mm256_set1_ps(static_cast<float>(-sin_v)), dy_vec)
+                    ),
+                    _mm256_set1_ps(static_cast<float>(center_x))
+                );
+                
+                __m256 src_y = _mm256_add_ps(
+                    _mm256_add_ps(
+                        _mm256_mul_ps(_mm256_set1_ps(static_cast<float>(sin_v)), dx_vec),
+                        _mm256_mul_ps(_mm256_set1_ps(static_cast<float>(cos_v)), dy_vec)
+                    ),
+                    _mm256_set1_ps(static_cast<float>(center_y))
+                );
+                
+                // Get integer and fractional parts
+                __m256i x0 = _mm256_cvttps_epi32(src_x);
+                __m256i y0 = _mm256_cvttps_epi32(src_y);
+                __m256 fx = _mm256_sub_ps(src_x, _mm256_cvtepi32_ps(x0));
+                __m256 fy = _mm256_sub_ps(src_y, _mm256_cvtepi32_ps(y0));
+                
+                // Gather pixels with reflection boundary handling
+                alignas(32) int x0_arr[8], y0_arr[8];
+                _mm256_store_si256((__m256i*)x0_arr, x0);
+                _mm256_store_si256((__m256i*)y0_arr, y0);
+                
+                alignas(32) float v00_arr[8], v01_arr[8], v10_arr[8], v11_arr[8];
+                
+                for (int i = 0; i < 8; i++) {
+                    int xi0 = reflect_index(x0_arr[i], w);
+                    int yi0 = reflect_index(y0_arr[i], h);
+                    int xi1 = reflect_index(x0_arr[i] + 1, w);
+                    int yi1 = reflect_index(y0_arr[i] + 1, h);
+                    
+                    v00_arr[i] = ptr[yi0 * w + xi0];
+                    v01_arr[i] = ptr[yi0 * w + xi1];
+                    v10_arr[i] = ptr[yi1 * w + xi0];
+                    v11_arr[i] = ptr[yi1 * w + xi1];
+                }
+                
+                __m256 v00 = _mm256_load_ps(v00_arr);
+                __m256 v01 = _mm256_load_ps(v01_arr);
+                __m256 v10 = _mm256_load_ps(v10_arr);
+                __m256 v11 = _mm256_load_ps(v11_arr);
+                
+                // Perform interpolation
+                __m256 result = bilinear_interp_avx2(v00, v01, v10, v11, fx, fy);
+                
+                // Store results
+                _mm256_storeu_ps(&output[y * w + x], result);
+                
+                x += 7; // Skip processed pixels
+                continue;
+            }
+            #endif
+   
             // Use double precision for coordinate transformations
             double dx = static_cast<double>(x) - center_x;
             double dy = static_cast<double>(y) - center_y;
             double src_x = cos_v * dx - sin_v * dy + center_x;
             double src_y = sin_v * dx + cos_v * dy + center_y;
-
+            
             if (use_bilinear) {
                 //bilinear interpolation
                 // Ensure we stay within bounds for bilinear sampling
-                // Get integer coordinates
+                // Get integer coordinates - use floor to match SciPy exactly
                 int x0 = static_cast<int>(std::floor(src_x));
                 int y0 = static_cast<int>(std::floor(src_y));
                 int x1 = x0 + 1;
                 int y1 = y0 + 1;
 
-                // fractional parts
-                double fx = src_x - x0;
-                double fy = src_y - y0;
+                // fractional parts - keep as double for precision
+                double fx = src_x - static_cast<double>(x0);
+                double fy = src_y - static_cast<double>(y0);
 
                 // Bilinear interpolation with reflection boundary conditions
                 //RGB has 3 channels-> change it to be arbitary number for channels
@@ -105,7 +194,7 @@ void rotate_omp(py::array_t<float> image, float deg) {
             }
         }
     }
-
+   
     //memcpy(ptr, output.data(), sizeof(float) * w * h * 3);
     memcpy(ptr, output.data(), sizeof(float) * w * h * channels);
 }
