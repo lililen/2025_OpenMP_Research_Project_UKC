@@ -76,3 +76,96 @@ workers=8, Total Time=5.80s (Avg 1.93s/epoch)
 
 
 =======================================================================================
+
+
+
+
+(base) PS C:\Users\lenmo\research_project> python test_rotate.py
+SSIM calculation skipped: Since image dtype is floating point, you must specify the data_range parameter. Please read the documentation carefully (including the note). It is recommended that you always specify the data_range anyway.
+Rotation complete.
+Max value: 1.0000
+Mean absolute difference: 0.043679
+Time: 0.0016s
+(base) PS C:\Users\lenmo\research_project> python scipy_benchmark.py
+Starting benchmark...
+Running benchmark for size 256x256
+Image shape: (256, 256, 3), dtype: float32
+Appended results for 256x256
+Running benchmark for size 512x512
+Image shape: (512, 512, 3), dtype: float32
+Appended results for 512x512
+Running benchmark for size 1024x768
+Image shape: (1024, 768, 3), dtype: float32
+Appended results for 1024x768
+Running benchmark for size 768x1024
+Image shape: (768, 1024, 3), dtype: float32
+Appended results for 768x1024
+
+Size       OpenMP (s)   SciPy (s)    Speedup      Diff
+256x256    0.001579  0.013723     8.7x      0.219002
+512x512    0.002006  0.046856    23.4x      0.219116
+1024x768   0.005911  0.120828    20.4x      0.244647
+768x1024   0.003878  0.122424    31.6x      0.244694
+(base) PS C:\Users\lenmo\research_project>
+
+
+=============================================
+Benchmarking size: 256x256
+Image shape: (256, 256, 3), dtype: float32
+C:\Users\lenmo\anaconda3\Lib\site-packages\skimage\metrics\simple_metrics.py:163: RuntimeWarning: divide by zero encountered in scalar divide
+  return 10 * np.log10((data_range ** 2) / err)
+benchmark for size 256x256 | SSIM: 1.000 | PSNR: inf dB | Diff: 0.0000
+
+Benchmarking size: 512x512
+Image shape: (512, 512, 3), dtype: float32
+benchmark for size 512x512 | SSIM: 1.000 | PSNR: inf dB | Diff: 0.0000
+
+Benchmarking size: 1024x768
+Image shape: (1024, 768, 3), dtype: float32
+benchmark for size 1024x768 | SSIM: 1.000 | PSNR: 208.2 dB | Diff: 0.0000
+
+Benchmarking size: 768x1024
+Image shape: (768, 1024, 3), dtype: float32
+benchmark for size 768x1024 | SSIM: 1.000 | PSNR: 214.2 dB | Diff: 0.0000
+
+
+Size       OpenMP (ms)   SciPy (ms)    Speedup   SSIM    PSNR   Diff
+256x256         5.661        26.179        4.6x   1.000     inf   0.0000
+512x512         3.562        79.913       22.4x   1.000     inf   0.0000
+1024x768        9.200       200.927       21.8x   1.000   208.2   0.0000
+768x1024       13.913       248.576       17.9x   1.000   214.2   0.0000
+==================================================================
+
+
+Size       OpenMP (ms)   SciPy (ms)    Speedup   SSIM    PSNR   Diff
+256x256         5.833        18.844        3.2x   1.000   215.5   0.0000
+512x512        13.410        76.278        5.7x   1.000     inf   0.0000
+1024x768       10.767       163.325       15.2x   1.000   214.2   0.0000
+768x1024       15.494       164.923       10.6x   1.000     inf   0.0000
+==================================================================
+
+
+Size       OpenMP (ms)   SciPy (ms)    Speedup   SSIM    PSNR   Diff
+256x256        11.928        36.961        3.1x   1.000     inf   0.0000
+512x512         5.029        79.690       15.8x   1.000     inf   0.0000
+1024x768       14.897       178.840       12.0x   1.000     inf   0.0000
+768x1024       20.317       182.539        9.0x   1.000     inf   0.0000
+
+===================================================================
+
+Size       OpenMP (ms)   SciPy (ms)    Speedup   SSIM    PSNR   Diff
+256x256         1.960        12.539        6.4x   1.000     inf   0.0000
+512x512         2.777        47.368       17.1x   1.000     inf   0.0000
+1024x768        6.358       118.202       18.6x   1.000     inf   0.0000
+768x1024        6.471       125.417       19.4x   1.000     inf   0.0000
+
+===================================================================
+
+
+Size       OpenMP (ms)   SciPy (ms)    Speedup   SSIM    PSNR   Diff
+256x256         2.159         9.898        4.6x   1.000     inf   0.0000
+512x512         2.227        46.143       20.7x   1.000     inf   0.0000
+1024x768        6.783       130.872       19.3x   1.000   207.3   0.0000
+768x1024        5.130       113.198       22.1x   1.000   205.2   0.0000
+
+==========================================
